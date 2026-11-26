@@ -1,7 +1,7 @@
 /* SMJ 3D — visionneuse des assemblages SMJ (codes QR des plans, fichiers de job .smj3d).
    Aucune bibliothèque externe, aucun compte, rien envoyé sur Internet : tout reste sur le téléphone. */
 "use strict";
-const VERSION_APP = "1.0.1";
+const VERSION_APP = "1.0.3";
 
 /* ================================================================ langues */
 const TXT = {
@@ -15,7 +15,8 @@ const TXT = {
     unites: "Mesures", imperial: "mm + pieds-pouces",
     noteTerminees: "Une job marquée « Terminée » est supprimée du téléphone 7 jours plus tard.",
     notePrive: "SMJ 3D ne demande aucun compte et n'envoie rien sur Internet : les jobs restent sur ce téléphone.",
-    aideTourner: "1 doigt : tourner · 2 doigts : zoomer et déplacer", aideMesurer: "Mesurer : touchez 2 points",
+    aideTourner: "1 doigt : tourner · 2 doigts : zoomer et déplacer", aideMesurer: "Mesurer : touchez 2 points", angle: "Angle", aideAngle: "Angle : touchez 3 points, le 2e est le sommet",
+    sommet: "Touchez le sommet de l'angle (2e point).", troisieme: "Touchez le 3e point.", pente: "pente", complement: "complément", pentePiece: "Pente de la pièce",
     jobComplete: "Job complète", assemblage: "Assemblage", toute: "Toute la job", pieces: "pièces",
     fois: "fois", ouvrir: "Ouvrir", terminee: "Terminée", reprendre: "Remettre en cours", supprimer: "Supprimer",
     confirmeSuppr: "Supprimer cette job du téléphone ?", ajoutee: "Ajoutée", vue: "Ouverte",
@@ -28,7 +29,8 @@ const TXT = {
     sansJob: "Petite fenêtre : la job en traits. Ouvrez le fichier de la job pour la voir au complet.",
     horiz: "horiz.", vert: "vert.", piece: "Pièce", sansTitre: "Sans titre", jobFichier: "fichier de job",
     suppAuto: n => `${n} job(s) supprimée(s) du téléphone (pas ouvertes depuis longtemps ou terminées).`,
-    version: "Version", codesAsm: "assemblage(s)"
+    version: "Version", codesAsm: "assemblage(s)",
+    telechargement: "Téléchargement de la job…", pasInternet: "Pas d'Internet : la job complète se télécharge une seule fois, ensuite elle reste sur le téléphone.", lienBrise: "Cette job n'est pas (ou plus) en ligne."
   },
   en: {
     reglages: "Settings", scanner: "Scan a QR code", ouvrirFichier: "Open a job file (.smj3d)",
@@ -40,7 +42,8 @@ const TXT = {
     unites: "Measurements", imperial: "mm + feet-inches",
     noteTerminees: "A job marked “Completed” is removed from the phone 7 days later.",
     notePrive: "SMJ 3D needs no account and sends nothing over the Internet: jobs stay on this phone.",
-    aideTourner: "1 finger: rotate · 2 fingers: zoom and pan", aideMesurer: "Measure: tap 2 points",
+    aideTourner: "1 finger: rotate · 2 fingers: zoom and pan", aideMesurer: "Measure: tap 2 points", angle: "Angle", aideAngle: "Angle: tap 3 points, the 2nd is the vertex",
+    sommet: "Tap the vertex of the angle (2nd point).", troisieme: "Tap the 3rd point.", pente: "slope", complement: "complement", pentePiece: "Part slope",
     jobComplete: "Complete job", assemblage: "Assembly", toute: "Whole job", pieces: "parts",
     fois: "times", ouvrir: "Open", terminee: "Completed", reprendre: "Back in progress", supprimer: "Delete",
     confirmeSuppr: "Delete this job from the phone?", ajoutee: "Added", vue: "Opened",
@@ -53,7 +56,8 @@ const TXT = {
     sansJob: "Small window: the job as lines. Open the job file to see all of it.",
     horiz: "horiz.", vert: "vert.", piece: "Part", sansTitre: "Untitled", jobFichier: "job file",
     suppAuto: n => `${n} job(s) removed from the phone (not opened for a long time or completed).`,
-    version: "Version", codesAsm: "assembly(ies)"
+    version: "Version", codesAsm: "assembly(ies)",
+    telechargement: "Downloading the job…", pasInternet: "No Internet: the complete job downloads once, then it stays on the phone.", lienBrise: "This job is not (or no longer) online."
   }
 };
 const reglage = (k, d) => { try { const v = localStorage.getItem("smj3d." + k); return v === null ? d : v; } catch (e) { return d; } };
@@ -185,7 +189,31 @@ async function ouvrirStocke(o, asm){
     else if (JOBo) await afficher(JOBo, JOBo, asm || "");
   } catch (e) { toast(t("pasCode")); }
 }
+/* LIEN DE JOB (prototype 2026-11-26) : le code QR contient https://smj-app.github.io/#j=<id>.<clé>.
+   Le fichier j/<id> sur le site est chiffré ; la clé est après le #, elle n'est jamais envoyée sur Internet. */
+async function telechargerJob(id, cle64){
+  const b = cle64.replace(/-/g, "+").replace(/_/g, "/"), kb = Uint8Array.from(atob(b + "===".slice((b.length + 3) % 4)), c => c.charCodeAt(0));
+  const r = await fetch("j/" + id, {cache: "no-store"});
+  if (!r.ok) throw new Error("introuvable");
+  const tout = new Uint8Array(await r.arrayBuffer()), ct = tout.slice(0, -16), tag = tout.slice(-16);
+  const k = await crypto.subtle.importKey("raw", kb, {name: "HMAC", hash: "SHA-256"}, false, ["sign"]);
+  const te = new TextEncoder(), avec = (p, d) => { const o = new Uint8Array(p.length + d.length); o.set(p); o.set(d, p.length); return o; };
+  const t2 = new Uint8Array(await crypto.subtle.sign("HMAC", k, avec(te.encode("smj-tag"), ct)));
+  for (let i = 0; i < 16; i++) if (t2[i] !== tag[i]) throw new Error("mauvaise clé");
+  const nb = Math.ceil(ct.length / 32), blocs = [];
+  for (let i = 0; i < nb; i++){ const c = new Uint8Array(8); new DataView(c.buffer).setUint32(4, i); blocs.push(crypto.subtle.sign("HMAC", k, avec(te.encode("smj-flux"), c))); }
+  const fl = await Promise.all(blocs), pt = new Uint8Array(ct.length);
+  for (let i = 0; i < ct.length; i++) pt[i] = ct[i] ^ new Uint8Array(fl[i >> 5])[i & 31];
+  let bin = ""; for (let i = 0; i < pt.length; i += 8192) bin += String.fromCharCode.apply(null, pt.subarray(i, i + 8192));
+  return "SMJ1." + btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
 async function ouvrirTexte(texte){
+  const lien = String(texte).match(/[#&]j=([0-9a-f]{8,32})\.([A-Za-z0-9_-]{16,})/);
+  if (lien){
+    toast(t("telechargement"), 4000);
+    try { texte = await telechargerJob(lien[1], lien[2]); $("toast").hidden = true; }
+    catch (e) { toast(t(navigator.onLine === false ? "pasInternet" : "lienBrise"), 6000); return false; }
+  }
   let J;
   try { J = await lire(texte); } catch (e) { toast(t("pasCode")); return false; }
   let o = null;
@@ -223,7 +251,7 @@ async function scanner(){
     try {
       if (v.readyState >= 2){
         const r = await d.detect(v);
-        const bon = r.find(x => /SMJ1\./.test(x.rawValue || ""));
+        const bon = r.find(x => /SMJ1\.|[#&]j=/.test(x.rawValue || ""));
         if (bon && id === boucleScan){
           if (navigator.vibrate) navigator.vibrate(60);
           arreterScan(); history.replaceState({e: "ecranVue"}, "");
@@ -246,7 +274,7 @@ $("fPhoto").addEventListener("change", async e => {
   try {
     const im = await createImageBitmap(f);
     const r = await d.detect(im);
-    const bon = r.find(x => /SMJ1\./.test(x.rawValue || ""));
+    const bon = r.find(x => /SMJ1\.|[#&]j=/.test(x.rawValue || ""));
     if (!bon){ toast(t("rienTrouve")); return; }
     arreterScan(); history.replaceState({e: "ecranVue"}, "");
     await ouvrirTexte(bon.rawValue);
@@ -705,7 +733,8 @@ function pieds(mm){
 }
 const imp = () => reglage("unites", "imp") === "imp";
 function mesurer(p, cx, cy){
-  if (etat.pts.length === 2) etat.pts = [];
+  const n = etat.mes === "a" ? 3 : 2;
+  if (etat.pts.length >= n) etat.pts = [];
   const r = cv.getBoundingClientRect(), M = matrice(CAM, cv.width / cv.height);
   let best = null, bd = 1e9;
   for (const c of p.coins){
@@ -715,24 +744,49 @@ function mesurer(p, cx, cy){
   }
   if (!best) return;
   etat.pts.push(best);
-  if (etat.pts.length === 2){
+  if (n === 3){
+    if (etat.pts.length === 3) carteAngle(angle3(etat.pts));
+    else carteTexte(t(etat.pts.length === 1 ? "sommet" : "troisieme"));
+  } else if (etat.pts.length === 2){
     const [a, b] = etat.pts, d = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     carteMesure(d, Math.hypot(b[0] - a[0], b[1] - a[1]), Math.abs(b[2] - a[2]));
   } else carteTexte(t("deuxiemePoint"));
   dessiner();
 }
+/* ANGLE (Jean-Julien 2026-11-26) : 3 points accrochés aux coins, le 2e est le sommet */
+function angle3(P){
+  const [a, b, c] = P, u = [a[0] - b[0], a[1] - b[1], a[2] - b[2]], v = [c[0] - b[0], c[1] - b[1], c[2] - b[2]];
+  const lu = Math.hypot(...u), lv = Math.hypot(...v); if (!lu || !lv) return 0;
+  return Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / lu / lv))) * 180 / Math.PI;
+}
+const deg = x => (Math.round(x * 10) / 10).toFixed(1).replace(/\.0$/, "") + "°";
 function dessinerMesure(M, cw, ch){
   const s = $("svgMes"); s.textContent = "";
   let lab = $("etqMes");
   if (!etat.pts.length){ if (lab) lab.remove(); return; }
   const NS = "http://www.w3.org/2000/svg", P = etat.pts.map(p => projeter(M, p, cw, ch));
-  if (P.length === 2 && P[0] && P[1]){
+  for (let i = 0; i + 1 < P.length; i++){
+    if (!P[i] || !P[i + 1]) continue;
     const l = document.createElementNS(NS, "line");
-    l.setAttribute("x1", P[0][0]); l.setAttribute("y1", P[0][1]); l.setAttribute("x2", P[1][0]); l.setAttribute("y2", P[1][1]);
+    l.setAttribute("x1", P[i][0]); l.setAttribute("y1", P[i][1]); l.setAttribute("x2", P[i + 1][0]); l.setAttribute("y2", P[i + 1][1]);
     l.setAttribute("stroke", "#d67a3a"); l.setAttribute("stroke-width", "2.5"); s.append(l);
   }
+  if (P.length === 3 && P[0] && P[1] && P[2]){     // petit arc au sommet
+    const B = P[1], ang = q => Math.atan2(q[1] - B[1], q[0] - B[0]);
+    let a0 = ang(P[0]), a1 = ang(P[2]), da = a1 - a0;
+    while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+    const rr = Math.max(14, Math.min(34, Math.hypot(P[0][0] - B[0], P[0][1] - B[1]) / 3, Math.hypot(P[2][0] - B[0], P[2][1] - B[1]) / 3));
+    const pa = document.createElementNS(NS, "path");
+    pa.setAttribute("d", `M${B[0] + rr * Math.cos(a0)},${B[1] + rr * Math.sin(a0)} A${rr},${rr} 0 0 ${da > 0 ? 1 : 0} ${B[0] + rr * Math.cos(a0 + da)},${B[1] + rr * Math.sin(a0 + da)}`);
+    pa.setAttribute("fill", "none"); pa.setAttribute("stroke", "#fff"); pa.setAttribute("stroke-width", "2"); s.append(pa);
+  }
   for (const q of P){ if (!q) continue; const c = document.createElementNS(NS, "circle"); c.setAttribute("cx", q[0]); c.setAttribute("cy", q[1]); c.setAttribute("r", "6"); c.setAttribute("fill", "#d67a3a"); c.setAttribute("stroke", "#fff"); c.setAttribute("stroke-width", "1.5"); s.append(c); }
-  if (P.length === 2 && P[0] && P[1]){
+  if (etat.mes === "a" && P.length === 3 && P[0] && P[1] && P[2]){
+    if (!lab){ lab = document.createElement("div"); lab.id = "etqMes"; lab.className = "etq mes"; $("etiquettes").append(lab); }
+    lab.textContent = deg(angle3(etat.pts));
+    const B = P[1], m = [(P[0][0] + P[2][0]) / 2 - B[0], (P[0][1] + P[2][1]) / 2 - B[1]], lm = Math.hypot(...m) || 1;
+    lab.style.transform = `translate(${B[0] + m[0] / lm * 52}px,${B[1] + m[1] / lm * 52}px) translate(-50%,-50%)`;
+  } else if (etat.mes !== "a" && P.length === 2 && P[0] && P[1]){
     if (!lab){ lab = document.createElement("div"); lab.id = "etqMes"; lab.className = "etq mes"; $("etiquettes").append(lab); }
     const [a, b] = etat.pts; lab.textContent = Math.round(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])) + " mm";
     lab.style.transform = `translate(${(P[0][0] + P[1][0]) / 2}px,${(P[0][1] + P[1][1]) / 2}px) translate(-50%,-140%)`;
@@ -750,24 +804,72 @@ function carte(p){
   const l1 = document.createElement("div"); l1.className = "num";
   l1.textContent = (p.J.P[f[5]] || "") + " · " + Math.round(f[7]) + " mm" + (imp() ? " (" + pieds(f[7]) + ")" : "");
   const l2 = document.createElement("div"); l2.className = "lab"; l2.textContent = (f[6] || t("piece")) + " · " + t("assemblage").toLowerCase() + " " + p.nom;
-  c.append(mk, l1, l2); b.append(c);
+  c.append(mk, l1);
+  const pp = pentePiece(p.coins);
+  if (pp !== null){ const l3 = document.createElement("div"); l3.className = "num"; l3.textContent = t("pentePiece") + " " + deg(pp); c.append(l3); }
+  c.append(l2); b.append(c);
 }
 function carteMesure(d, dh, dv){
   const b = boite(), c = document.createElement("div"); c.className = "card";
   const a = document.createElement("div"); a.className = "mk"; a.textContent = Math.round(d) + " mm";
   const l = document.createElement("div"); l.className = "num";
-  l.textContent = (imp() ? pieds(d) + " · " : "") + t("horiz") + " " + Math.round(dh) + " · " + t("vert") + " " + Math.round(dv);
+  l.textContent = (imp() ? pieds(d) + " · " : "") + t("horiz") + " " + Math.round(dh) + " · " + t("vert") + " " + Math.round(dv)
+    + " · " + t("pente") + " " + deg(Math.atan2(dv, dh) * 180 / Math.PI);
   c.append(a, l); b.append(c);
+}
+function carteAngle(A){
+  const b = boite(), c = document.createElement("div"); c.className = "card";
+  const a = document.createElement("div"); a.className = "mk"; a.textContent = deg(A);
+  const l = document.createElement("div"); l.className = "num";
+  l.textContent = t("complement") + " " + deg(Math.abs(90 - A)) + " · 180° − " + deg(A) + " = " + deg(180 - A);
+  c.append(a, l); b.append(c);
+}
+/* pente d'une pièce allongée (limon, garde, poutre) par rapport à l'horizontale :
+   axe principal des coins, puis la plus longue arête réelle parallèle à cet axe (pas la diagonale) */
+function pentePiece(L){
+  if (!L || L.length < 2 || L.length > 3000) return null;
+  const c = centre(L), C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (const q of L){ const w = [q[0] - c[0], q[1] - c[1], q[2] - c[2]]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i][j] += w[i] * w[j]; }
+  let u = [1, 0.3, 0.2];
+  for (let k = 0; k < 60; k++){ const v = [0, 1, 2].map(i => C[i][0] * u[0] + C[i][1] * u[1] + C[i][2] * u[2]), l = Math.hypot(...v); if (!l) return null; u = v.map(x => x / l); }
+  let p0 = 1e18, p1 = -1e18, ep = 0;
+  for (const q of L){
+    const w = [q[0] - c[0], q[1] - c[1], q[2] - c[2]], s = w[0] * u[0] + w[1] * u[1] + w[2] * u[2];
+    p0 = Math.min(p0, s); p1 = Math.max(p1, s); ep = Math.max(ep, Math.hypot(w[0] - s * u[0], w[1] - s * u[1], w[2] - s * u[2]));
+  }
+  const lg = p1 - p0;
+  if (lg < 150 || ep * 2 * 2.5 > lg) return null;  // pas assez allongée pour qu'une pente veuille dire quelque chose
+  // les vraies arêtes longues sont plusieurs à être parallèles (4 coins d'une plaque, tous les côtés d'un tube) :
+  // on garde la direction sur laquelle le plus de paires de coins s'entendent, pas une diagonale isolée
+  let K = [];
+  const pas = Math.max(1, Math.floor(L.length / 300));
+  for (let i = 0; i < L.length; i += pas) for (let j = i + 1; j < L.length; j += pas){
+    const d = [L[j][0] - L[i][0], L[j][1] - L[i][1], L[j][2] - L[i][2]], l = Math.hypot(...d);
+    if (l < 0.5 * lg) continue;
+    let pr = (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) / l;
+    if (Math.abs(pr) < Math.cos(6 * Math.PI / 180)) continue;
+    const sg = pr < 0 ? -1 : 1; K.push({d: d.map(x => x * sg / l), l});
+  }
+  if (K.length > 500){ K.sort((x, y) => y.l - x.l); K = K.slice(0, 500); }
+  const tol = Math.cos(0.15 * Math.PI / 180);
+  let best = null, bv = 0, bl = 0;
+  for (const k of K){
+    let v = 0; for (const m of K) if (k.d[0] * m.d[0] + k.d[1] * m.d[1] + k.d[2] * m.d[2] > tol) v++;
+    if (v > bv || (v === bv && k.l > bl)){ bv = v; bl = k.l; best = k.d; }
+  }
+  const a = bv >= 2 ? best : u;
+  return Math.atan2(Math.abs(a[2]), Math.hypot(a[0], a[1])) * 180 / Math.PI;
 }
 
 /* ================================================================ boutons */
 function majBoutons(){
-  $("bNum").classList.toggle("on", etat.num); $("bMes").classList.toggle("on", etat.mes); $("bCtx").classList.toggle("on", etat.ctx);
-  $("aide").textContent = etat.mes ? t("aideMesurer") : t("aideTourner");
+  $("bNum").classList.toggle("on", etat.num); $("bMes").classList.toggle("on", etat.mes === "d"); $("bAng").classList.toggle("on", etat.mes === "a"); $("bCtx").classList.toggle("on", etat.ctx);
+  $("aide").textContent = etat.mes === "a" ? t("aideAngle") : etat.mes ? t("aideMesurer") : t("aideTourner");
 }
 $("sel").onchange = e => { etat.asm = e.target.value; construire(); cadrer(); carte(null); };
 $("bNum").onclick = () => { etat.num = !etat.num; construire(); majBoutons(); };
-$("bMes").onclick = () => { etat.mes = !etat.mes; etat.pts = []; carte(null); majBoutons(); dessiner(); };
+$("bMes").onclick = () => { etat.mes = etat.mes === "d" ? false : "d"; etat.pts = []; carte(null); majBoutons(); dessiner(); };
+$("bAng").onclick = () => { etat.mes = etat.mes === "a" ? false : "a"; etat.pts = []; carte(null); majBoutons(); dessiner(); };
 $("bCtx").onclick = () => { etat.ctx = !etat.ctx; construire(); cadrer(); majBoutons(); };
 $("bFit").onclick = cadrer;
 $("bScanner").onclick = scanner;
@@ -787,7 +889,7 @@ async function demarrer(){
   montrer("ecranJobs");
   // un code dans l'adresse (…#SMJ1.xxx) ou un fichier partagé vers l'application (« Partager » > SMJ 3D)
   const h = decodeURIComponent(location.hash || "");
-  if (/SMJ1\./.test(h)){ history.replaceState(null, "", location.pathname); await ouvrirTexte(h); return; }
+  if (/SMJ1\.|[#&]j=/.test(h)){ history.replaceState(null, "", location.pathname); await ouvrirTexte(h); return; }
   if (/partage=1/.test(location.search)){
     history.replaceState(null, "", location.pathname);
     try {
