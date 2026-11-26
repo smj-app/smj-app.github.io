@@ -63,7 +63,10 @@ select{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var
 .card .mk{font:650 19px/1.2 ui-monospace,"SF Mono",Menlo,monospace;color:var(--accent)}
 .card .num{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
 .card .lab{color:var(--muted);font-size:11px;letter-spacing:.05em;text-transform:uppercase}
-.mini{position:absolute;right:max(10px,env(safe-area-inset-right,0px));top:10px;width:min(40%,230px);aspect-ratio:4/3;border:1px solid var(--line);border-radius:10px;pointer-events:none}
+.mini{position:absolute;right:max(10px,env(safe-area-inset-right,0px));top:10px;width:min(40%,230px);aspect-ratio:4/3;border:1px solid var(--line);border-radius:10px;pointer-events:auto;cursor:zoom-in;touch-action:none;z-index:3}
+.mini.grand{left:max(10px,env(safe-area-inset-left,0px));width:auto;bottom:10px;aspect-ratio:auto;border-color:var(--accent);cursor:grab;background:transparent}
+.mini .fermer{display:none;position:absolute;right:6px;top:6px;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:rgba(20,23,28,.9);color:var(--fg);font-size:20px;line-height:1;pointer-events:auto}
+.mini.grand .fermer{display:block}
 .mini>span{position:absolute;left:7px;right:7px;bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 .mini b{color:#ff4d4d}
 .aide{position:absolute;left:50%;transform:translateX(-50%);bottom:10px;font-size:12px;color:var(--muted);background:rgba(20,23,28,.85);padding:6px 11px;border-radius:999px;white-space:nowrap;pointer-events:none}
@@ -72,3 +75,4 @@ select{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var
 @media (max-width:380px){.barre{gap:5px}.barre button{padding:7px 7px;font-size:13px}.barre select{min-width:96px;font-size:13px}}
 .barre select{flex:1 1 120px;min-width:110px;max-width:240px}
 .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(80px + env(safe-area-inset-bottom,0px));background:#2a3038;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14px;max-width:min(90vw,420px);text-align:center;z-index:9}
+.scene:has(.mini.grand) .aide,.scene:has(.mini.grand) .info{display:none}

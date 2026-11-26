@@ -1,7 +1,7 @@
 /* SMJ 3D — visionneuse des assemblages SMJ (codes QR des plans, fichiers de job .smj3d).
    Aucune bibliothèque externe, aucun compte, rien envoyé sur Internet : tout reste sur le téléphone. */
 "use strict";
-const VERSION_APP = "1.0.0";
+const VERSION_APP = "1.0.1";
 
 /* ================================================================ langues */
 const TXT = {
@@ -386,7 +386,7 @@ function projeter(M, p, W, H){
 let VUE = null, JOB = null, O = [0, 0, 0];
 let lots = [], fantomes = [], lotsMini = [], piecesL = [], etiqs = [];
 const etat = {asm: "", ctx: true, num: true, mes: false, pts: []};
-let miniOn = false, miniC = [0, 0, 0], miniR = 1000, sphere = {c: [0, 0, 0], r: 1000};
+let miniOn = false, miniC = [0, 0, 0], miniR = 1000, miniZ = 1, miniRouge = [0, 0, 0], sphere = {c: [0, 0, 0], r: 1000};
 
 async function afficher(J, jobOuvert, asmDansJob){
   VUE = J; JOB = jobOuvert && jobOuvert.t === J.t ? jobOuvert : (J.a ? null : J);
@@ -475,10 +475,11 @@ function construireMini(){
     if (ln.e.length) lotsMini.push(Object.assign(lot(ln, [0.54, 0.58, 0.64], 1), {lignes: true}));
     for (const dx of [null].concat(J.R || [])) J.I.forEach(it => ag(solide(J, it, dx, O, rouge)));
   }
+  if (rouge.p.length){ const R = rouge.p, c = [0, 0, 0]; for (let i = 0; i < R.length; i += 3){ c[0] += R[i]; c[1] += R[i + 1]; c[2] += R[i + 2]; } miniRouge = c.map(v => v / (R.length / 3)); }
   if (gris.p.length) lotsMini.push(lot(gris, [0.42, 0.46, 0.52], 1));
   if (rouge.p.length) lotsMini.push(Object.assign(lot(rouge, [1, 0.23, 0.23], 1), {plat: true}));
   miniC = mn.map((v, i) => (v + mx[i]) / 2); miniR = Math.max(300, Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2);
-  miniOn = lotsMini.length > 0;
+  miniOn = lotsMini.length > 0; miniZ = 1; $("mini").classList.remove("grand");
   $("mini").hidden = !miniOn; $("miniNom").textContent = J.a;
 }
 function cadrer(){
@@ -488,6 +489,41 @@ function cadrer(){
   CAM.D = sphere.r / Math.sin(f / 2) * 1.05;
   dessiner();
 }
+
+/* PETITE FENÊTRE AGRANDIE (Jean-Julien 2026-11-25) : toucher la petite fenêtre l'agrandit sur toute la vue ;
+   1 doigt la tourne, 2 doigts zooment, toucher sans bouger (ou ×) la remet petite. */
+(() => {
+  const el = $("mini"), pts = new Map();
+  let tap = null;
+  const grand = on => { el.classList.toggle("grand", on); miniZ = 1; taille(); dessiner(); };
+  $("miniFermer").addEventListener("click", e => { e.stopPropagation(); grand(false); });
+  el.addEventListener("pointerdown", e => {
+    if (e.target.id === "miniFermer") return;
+    el.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    tap = pts.size === 1 ? {x: e.clientX, y: e.clientY, t: Date.now(), bouge: false} : null;
+  });
+  el.addEventListener("pointermove", e => {
+    const d = pts.get(e.pointerId); if (!d || !el.classList.contains("grand")) return;
+    const av = [...pts.values()].map(p => ({x: p.x, y: p.y}));
+    d.x = e.clientX; d.y = e.clientY;
+    if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 7) tap.bouge = true;
+    const P = [...pts.values()];
+    if (P.length === 1){ CAM.yaw -= (P[0].x - av[0].x) * 0.008; CAM.pitch = Math.max(-1.52, Math.min(1.52, CAM.pitch + (P[0].y - av[0].y) * 0.008)); }
+    else if (P.length >= 2){
+      const d0 = Math.hypot(av[0].x - av[1].x, av[0].y - av[1].y), d1 = Math.hypot(P[0].x - P[1].x, P[0].y - P[1].y);
+      if (d0 > 0 && d1 > 0) miniZ = Math.max(0.5, Math.min(30, miniZ * d1 / d0));
+    }
+    dessiner();
+  });
+  const fin = e => {
+    const seul = pts.size === 1; pts.delete(e.pointerId);
+    if (seul && tap && !tap.bouge && Date.now() - tap.t < 600) grand(!el.classList.contains("grand"));
+    tap = null;
+  };
+  el.addEventListener("pointerup", fin);
+  el.addEventListener("pointercancel", e => { pts.delete(e.pointerId); tap = null; });
+  el.addEventListener("wheel", e => { if (!el.classList.contains("grand")) return; e.preventDefault(); miniZ = Math.max(0.5, Math.min(30, miniZ * Math.exp(-e.deltaY * 0.0012))); dessiner(); }, {passive: false});
+})();
 
 /* ================================================================ dessin */
 let aDessiner = false;
@@ -547,8 +583,9 @@ function rendu(){
     const x = Math.round((r.left - rc.left) * k), y = Math.round((rc.bottom - r.bottom) * k), w = Math.round(r.width * k), h = Math.round(r.height * k);
     gl.enable(gl.SCISSOR_TEST); gl.scissor(x, y, w, h); gl.viewport(x, y, w, h);
     gl.clearColor(0.05, 0.06, 0.075, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    const cm = {T: miniC, yaw: CAM.yaw, pitch: CAM.pitch, fov: CAM.fov, D: 0};
-    cm.D = miniR / Math.sin(Math.min(cm.fov, 2 * Math.atan(Math.tan(cm.fov / 2) * w / h)) / 2) * 1.02;
+    const kz = 1 - 1 / miniZ;                     // en zoomant, on se rapproche de l'assemblage (rouge)
+    const cm = {T: miniC.map((v, i) => v + (miniRouge[i] - v) * kz), yaw: CAM.yaw, pitch: CAM.pitch, fov: CAM.fov, D: 0};
+    cm.D = miniR / Math.sin(Math.min(cm.fov, 2 * Math.atan(Math.tan(cm.fov / 2) * w / h)) / 2) * 1.02 / miniZ;
     const Mm = matrice(cm, w / h);
     passe(Mm, lotsMini.filter(o => !o.lignes), lumiereDe(cm), false);
     gl.useProgram(PG.ligne); gl.uniformMatrix4fv(gl.getUniformLocation(PG.ligne, "M"), false, Mm);
