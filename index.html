@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17324d">
+<title>SMJ 3D</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icones/icone-192.png">
+<link rel="apple-touch-icon" href="icones/icone-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ÉCRAN 1 : MES JOBS -->
+  <section id="ecranJobs" class="ecran">
+    <header>
+      <div class="logo">SMJ <b>3D</b></div>
+      <div class="flex"></div>
+      <button id="bLangue" type="button" class="petit">EN</button>
+      <button id="bReglages" type="button" class="petit" data-t="reglages">Réglages</button>
+    </header>
+    <main class="defile">
+      <div class="actions">
+        <button id="bScanner" type="button" class="gros principal">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M7 12h10"/></svg>
+          <span data-t="scanner">Scanner un code QR</span>
+        </button>
+        <label class="gros" id="lFichier">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6"/></svg>
+          <span data-t="ouvrirFichier">Ouvrir un fichier de job (.smj3d)</span>
+          <input id="fJob" type="file">
+        </label>
+      </div>
+      <h2 data-t="mesJobs">Mes jobs</h2>
+      <div id="listeJobs" class="liste"></div>
+      <p id="vide" class="note" data-t="vide" hidden>Aucune job pour l'instant. Scannez le code QR d'un plan d'assemblage SMJ.</p>
+      <h2 id="hTerminees" data-t="terminees" hidden>Terminées</h2>
+      <div id="listeTerminees" class="liste"></div>
+    </main>
+  </section>
+
+  <!-- ÉCRAN 2 : SCANNER -->
+  <section id="ecranScan" class="ecran" hidden>
+    <video id="video" playsinline muted></video>
+    <div class="viseur"><div></div></div>
+    <div class="scanBas">
+      <p id="scanMsg" data-t="viser">Visez le code QR du plan</p>
+      <div class="rang">
+        <label class="bouton" id="lPhoto"><span data-t="photo">Prendre une photo</span><input id="fPhoto" type="file" accept="image/*" capture="environment"></label>
+        <button id="bFinScan" type="button" data-t="annuler">Annuler</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ÉCRAN 3 : VISIONNEUSE 3D -->
+  <section id="ecranVue" class="ecran" hidden>
+    <header>
+      <button id="bRetour" type="button" class="petit" aria-label="Retour">‹</button>
+      <div class="job" id="titreVue"></div>
+    </header>
+    <div class="scene">
+      <canvas id="c"></canvas>
+      <svg id="svgMes" class="calque"></svg>
+      <div id="etiquettes" class="calque"></div>
+      <div class="info" id="info"></div>
+      <div class="mini" id="mini" hidden><span><span data-t="dansLaJob">Dans la job</span> : <b id="miniNom"></b></span></div>
+      <div class="aide" id="aide"></div>
+    </div>
+    <div class="barre">
+      <select id="sel" aria-label="Assemblage"></select>
+      <button id="bCtx" type="button" data-t="dansLaJob">Dans la job</button>
+      <button id="bNum" type="button" class="on" data-t="numeros">Numéros</button>
+      <button id="bMes" type="button" data-t="mesurer">Mesurer</button>
+      <button id="bFit" type="button" data-t="recentrer">Recentrer</button>
+    </div>
+  </section>
+
+  <!-- RÉGLAGES -->
+  <section id="ecranReglages" class="ecran" hidden>
+    <header>
+      <button id="bRetourR" type="button" class="petit" aria-label="Retour">‹</button>
+      <div class="job"><strong data-t="reglages">Réglages</strong></div>
+    </header>
+    <main class="defile">
+      <label class="champ"><span data-t="autoSuppr">Supprimer du téléphone les jobs pas ouvertes depuis</span>
+        <select id="sAuto">
+          <option value="0" data-t="jamais">Jamais</option>
+          <option value="30">30</option><option value="60">60</option><option value="90">90</option><option value="180">180</option>
+        </select>
+      </label>
+      <label class="champ"><span data-t="unites">Mesures</span>
+        <select id="sUnites"><option value="mm">mm</option><option value="imp" data-t="imperial">mm + pieds-pouces</option></select>
+      </label>
+      <p class="note" data-t="noteTerminees">Une job marquée « Terminée » est supprimée du téléphone 7 jours plus tard.</p>
+      <p class="note" data-t="notePrive">SMJ 3D ne demande aucun compte et n'envoie rien sur Internet : les jobs restent sur ce téléphone.</p>
+      <p class="note petitTexte" id="version"></p>
+    </main>
+  </section>
+
+  <div id="toast" class="toast" hidden></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

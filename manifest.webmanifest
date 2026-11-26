@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "SMJ 3D",
+  "short_name": "SMJ 3D",
+  "description": "Scannez le code QR d'un plan d'assemblage SMJ : l'assemblage en 3D, avec les numéros de pièces et les mesures.",
+  "lang": "fr-CA",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#14171c",
+  "theme_color": "#17324d",
+  "categories": ["productivity", "business", "utilities"],
+  "icons": [
+    {"src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icones/masquable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+    {"src": "icones/masquable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "share_target": {
+    "action": "partage",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {"files": [{"name": "f", "accept": [".smj3d", "text/plain", "application/octet-stream"]}]}
+  }
+}
