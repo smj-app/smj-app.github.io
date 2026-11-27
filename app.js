@@ -1,7 +1,7 @@
 /* SMJ 3D — visionneuse des assemblages SMJ (codes QR des plans, fichiers de job .smj3d).
    Aucune bibliothèque externe, aucun compte, rien envoyé sur Internet : tout reste sur le téléphone. */
 "use strict";
-const VERSION_APP = "1.0.3";
+const VERSION_APP = "1.0.4";
 
 /* ================================================================ langues */
 const TXT = {
@@ -16,7 +16,7 @@ const TXT = {
     noteTerminees: "Une job marquée « Terminée » est supprimée du téléphone 7 jours plus tard.",
     notePrive: "SMJ 3D ne demande aucun compte et n'envoie rien sur Internet : les jobs restent sur ce téléphone.",
     aideTourner: "1 doigt : tourner · 2 doigts : zoomer et déplacer", aideMesurer: "Mesurer : touchez 2 points", angle: "Angle", aideAngle: "Angle : touchez 3 points, le 2e est le sommet",
-    sommet: "Touchez le sommet de l'angle (2e point).", troisieme: "Touchez le 3e point.", pente: "pente", complement: "complément", pentePiece: "Pente de la pièce",
+    sommet: "Touchez le sommet de l'angle (2e point).", troisieme: "Touchez le 3e point.", pente: "pente", complement: "complément", pentePiece: "Pente de la pièce", pieceLab: "Pièce", poidsAsm: "Poids de l'assemblage", isolerPiece: "Isoler la pièce", isolerAsm: "Isoler l'assemblage", toutAfficher: "Tout afficher",
     jobComplete: "Job complète", assemblage: "Assemblage", toute: "Toute la job", pieces: "pièces",
     fois: "fois", ouvrir: "Ouvrir", terminee: "Terminée", reprendre: "Remettre en cours", supprimer: "Supprimer",
     confirmeSuppr: "Supprimer cette job du téléphone ?", ajoutee: "Ajoutée", vue: "Ouverte",
@@ -43,7 +43,7 @@ const TXT = {
     noteTerminees: "A job marked “Completed” is removed from the phone 7 days later.",
     notePrive: "SMJ 3D needs no account and sends nothing over the Internet: jobs stay on this phone.",
     aideTourner: "1 finger: rotate · 2 fingers: zoom and pan", aideMesurer: "Measure: tap 2 points", angle: "Angle", aideAngle: "Angle: tap 3 points, the 2nd is the vertex",
-    sommet: "Tap the vertex of the angle (2nd point).", troisieme: "Tap the 3rd point.", pente: "slope", complement: "complement", pentePiece: "Part slope",
+    sommet: "Tap the vertex of the angle (2nd point).", troisieme: "Tap the 3rd point.", pente: "slope", complement: "complement", pentePiece: "Part slope", pieceLab: "Part", poidsAsm: "Assembly weight", isolerPiece: "Isolate part", isolerAsm: "Isolate assembly", toutAfficher: "Show all",
     jobComplete: "Complete job", assemblage: "Assembly", toute: "Whole job", pieces: "parts",
     fois: "times", ouvrir: "Open", terminee: "Completed", reprendre: "Back in progress", supprimer: "Delete",
     confirmeSuppr: "Delete this job from the phone?", ajoutee: "Added", vue: "Opened",
@@ -412,13 +412,13 @@ function projeter(M, p, W, H){
 
 /* ================================================================ ce qu'on regarde */
 let VUE = null, JOB = null, O = [0, 0, 0];
-let lots = [], fantomes = [], lotsMini = [], piecesL = [], etiqs = [];
-const etat = {asm: "", ctx: true, num: true, mes: false, pts: []};
+let lots = [], fantomes = [], lotsMini = [], piecesL = [], etiqs = [], lotSel = null;
+const etat = {asm: "", ctx: true, num: true, mes: false, pts: [], sel: null, iso: null};
 let miniOn = false, miniC = [0, 0, 0], miniR = 1000, miniZ = 1, miniRouge = [0, 0, 0], sphere = {c: [0, 0, 0], r: 1000};
 
 async function afficher(J, jobOuvert, asmDansJob){
   VUE = J; JOB = jobOuvert && jobOuvert.t === J.t ? jobOuvert : (J.a ? null : J);
-  etat.asm = asmDansJob || ""; etat.pts = []; etat.mes = false;
+  etat.asm = asmDansJob || ""; etat.pts = []; etat.mes = false; etat.sel = null; etat.iso = null;
   O = J.I.length ? [J.I[0][2], J.I[0][3], J.I[0][4]] : [0, 0, 0];
   const tv = $("titreVue"); tv.textContent = "";
   const s = document.createElement("strong");
@@ -450,27 +450,36 @@ function construire(){
   const gros = base.I.length > 600;
   let mn = [1e18, 1e18, 1e18], mx = [-1e18, -1e18, -1e18];
   for (const nom in parNom){
-    const actif = !cible || nom === cible;
-    const out = {p: [], n: [], id: actif ? [] : null, e: actif && !(gros && !cible) ? [] : null, k: [0, 0, 0]};
+    const actifNom = !cible || nom === cible;
+    const out = {p: [], n: [], id: [], e: !(gros && !cible && !etat.iso) ? [] : null, k: [0, 0, 0]}, gh = {p: [], n: []};
     for (const it of parNom[nom]){
+      // ISOLER (Jean-Julien 2026-11-26) : seulement la pièce ou l'assemblage choisi ; le reste en fantôme pâle
+      const actif = etat.iso ? etat.iso.has(it) : actifNom;
       if (actif){ const q = piecesL.length + 1; out.k = [(q & 255) / 255, (q >> 8 & 255) / 255, (q >> 16 & 255) / 255]; }
-      const coins = solide(base, it, null, O, out);
+      const coins = solide(base, it, null, O, actif ? out : gh);
       if (actif){
         piecesL.push({J: base, it, coins, nom});
         for (const c of coins) for (let i = 0; i < 3; i++){ mn[i] = Math.min(mn[i], c[i]); mx[i] = Math.max(mx[i], c[i]); }
       }
     }
     const col = PAL[base.A.indexOf(nom) % PAL.length];
-    if (actif) lots.push(lot(out, col, 1)); else fantomes.push(lot(out, [0.56, 0.63, 0.71], 0.10));
+    if (out.p.length) lots.push(lot(out, col, 1));
+    if (gh.p.length) fantomes.push(lot(gh, [0.56, 0.63, 0.71], etat.iso ? 0.07 : 0.10));
   }
   sphere = {c: mn.map((v, i) => (v + mx[i]) / 2), r: Math.max(200, Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2)};
+  grouper();
+  construireSel();
   // étiquettes : numéros des pièces, ou noms d'assemblages pour une grosse job entière
   const box = $("etiquettes"); box.textContent = ""; etiqs = [];
   const ajout = (txt, c, cls) => { const e = document.createElement("div"); e.className = "etq" + (cls ? " " + cls : ""); e.textContent = txt; box.append(e); etiqs.push({e, c}); };
-  if (!cible && (gros || !etat.num)){
+  if (!cible && !etat.iso && (gros || !etat.num)){
+    // une étiquette par COPIE d'assemblage (P1 à chaque étage), pas une seule au milieu de toutes les copies
     const parA = {};
-    for (const p of piecesL){ const a = parA[p.nom] = parA[p.nom] || [0, 0, 0, 0]; const c = centre(p.coins); a[0] += c[0]; a[1] += c[1]; a[2] += c[2]; a[3]++; }
-    for (const n in parA){ const a = parA[n]; ajout(n, [a[0] / a[3], a[1] / a[3], a[2] / a[3]], "asm"); }
+    for (const p of piecesL){ const k = p.nom + "\u0000" + p.grp, a = parA[k] = parA[k] || [0, 0, 0, 0, p.nom]; const c = centre(p.coins); a[0] += c[0]; a[1] += c[1]; a[2] += c[2]; a[3]++; }
+    for (const k in parA){ const a = parA[k]; ajout(a[4], [a[0] / a[3], a[1] / a[3], a[2] / a[3]], "asm"); }
+    // chaque NOM d'abord une fois (tous les assemblages ont leur numéro), puis les autres copies s'il reste de la place
+    const vu = {}; etiqs.forEach(q => { const n = q.e.textContent; q.rang = vu[n] = (vu[n] || 0) + 1; });
+    etiqs.sort((x, y) => x.rang - y.rang);
   } else {
     const vus = [];
     for (const p of piecesL){
@@ -482,6 +491,38 @@ function construire(){
   }
   etiqs.forEach(q => { q.e.hidden = !(etat.num || !cible); });
   dessiner();
+}
+/* COPIES d'un même assemblage (même nom à chaque étage) : groupes de pièces qui se touchent */
+function grouper(){
+  const parNom = {};
+  piecesL.forEach((p, i) => {
+    let a = [1e18, 1e18, 1e18], b = [-1e18, -1e18, -1e18];
+    for (const c of p.coins) for (let k = 0; k < 3; k++){ a[k] = Math.min(a[k], c[k]); b[k] = Math.max(b[k], c[k]); }
+    p.bb = [a, b]; (parNom[p.nom] = parNom[p.nom] || []).push(i);
+  });
+  for (const nom in parNom){
+    const L = parNom[nom], par = L.map((_, i) => i);
+    const rac = i => { while (par[i] !== i){ par[i] = par[par[i]]; i = par[i]; } return i; };
+    for (let i = 0; i < L.length; i++){
+      const A = piecesL[L[i]].bb;
+      for (let j = i + 1; j < L.length; j++){
+        const B = piecesL[L[j]].bb;
+        if (A[0][0] - 25 <= B[1][0] && B[0][0] - 25 <= A[1][0] && A[0][1] - 25 <= B[1][1] && B[0][1] - 25 <= A[1][1] && A[0][2] - 25 <= B[1][2] && B[0][2] - 25 <= A[1][2]){
+          const ri = rac(i), rj = rac(j); if (ri !== rj) par[ri] = rj;
+        }
+      }
+    }
+    L.forEach((ip, i) => { piecesL[ip].grp = rac(i); });
+  }
+}
+/* PIÈCE CHOISIE (Jean-Julien 2026-11-26) : en jaune, et visible à travers les autres pièces */
+function construireSel(){
+  if (lotSel){ libererLots([lotSel]); lotSel = null; }
+  const p = etat.sel && piecesL.find(q => q.it === etat.sel);
+  if (!p){ etat.sel = null; return; }
+  const out = {p: [], n: [], e: []};
+  solide(p.J, p.it, null, O, out);
+  lotSel = lot(out, [1, 0.84, 0.15], 1);
 }
 function centre(L){ const c = [0, 0, 0]; L.forEach(p => { c[0] += p[0]; c[1] += p[1]; c[2] += p[2]; }); return c.map(v => v / (L.length || 1)); }
 
@@ -604,6 +645,14 @@ function rendu(){
     passe(M, fantomes, lumiereDe(CAM), false);
     gl.depthMask(true); gl.disable(gl.BLEND);
   }
+  if (lotSel){
+    gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2, -2); gl.depthFunc(gl.LEQUAL);
+    passe(M, [lotSel], lumiereDe(CAM), true);
+    gl.disable(gl.POLYGON_OFFSET_FILL); gl.depthFunc(gl.LESS);
+    gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    passe(M, [Object.assign({}, lotSel, {a: 0.30})], lumiereDe(CAM), false);       // à travers ce qui la cache
+    gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST);
+  }
   // petite fenêtre
   const el = $("mini");
   if (miniOn && !el.hidden){
@@ -721,6 +770,7 @@ function viser(cx, cy){                          // quelle pièce est sous le do
 function toucher(cx, cy){
   const p = viser(cx, cy);
   if (etat.mes){ if (p) mesurer(p, cx, cy); return; }
+  etat.sel = p ? p.it : null; construireSel(); dessiner();
   carte(p);
 }
 
@@ -800,14 +850,35 @@ function carte(p){
   const b = boite(); if (!p) return;
   const f = p.J.F[p.it[0]];
   const c = document.createElement("div"); c.className = "card";
-  const mk = document.createElement("div"); mk.className = "mk"; mk.textContent = f[4] || "—";
+  const mk = document.createElement("div"); mk.className = "mk";
+  const mk1 = document.createElement("span"); mk1.className = "lab"; mk1.textContent = t("pieceLab") + " ";
+  const mk2 = document.createElement("span"); mk2.textContent = f[4] || "—";
+  const mk3 = document.createElement("span"); mk3.className = "lab"; mk3.textContent = "  " + t("assemblage") + " ";
+  const mk4 = document.createElement("span"); mk4.className = "asmk"; mk4.textContent = p.nom;
+  mk.append(mk1, mk2, mk3, mk4);
+  const ia = p.J.A.indexOf(p.nom), w = p.J.W && ia >= 0 ? p.J.W[ia] : 0;
   const l1 = document.createElement("div"); l1.className = "num";
   l1.textContent = (p.J.P[f[5]] || "") + " · " + Math.round(f[7]) + " mm" + (imp() ? " (" + pieds(f[7]) + ")" : "");
   const l2 = document.createElement("div"); l2.className = "lab"; l2.textContent = (f[6] || t("piece")) + " · " + t("assemblage").toLowerCase() + " " + p.nom;
   c.append(mk, l1);
   const pp = pentePiece(p.coins);
   if (pp !== null){ const l3 = document.createElement("div"); l3.className = "num"; l3.textContent = t("pentePiece") + " " + deg(pp); c.append(l3); }
-  c.append(l2); b.append(c);
+  if (w > 0){ const l4 = document.createElement("div"); l4.className = "num"; l4.textContent = t("poidsAsm") + " : " + w.toFixed(1) + " lb (" + Math.round(w * 0.45359) + " kg)"; c.append(l4); }
+  c.append(l2);
+  // isoler la pièce / l'assemblage (la copie touchée), ou tout réafficher
+  const rang = document.createElement("div"); rang.className = "rangCarte";
+  const bouton = (txt, fn) => { const x = document.createElement("button"); x.type = "button"; x.className = "petit"; x.textContent = txt; x.onclick = fn; rang.append(x); };
+  if (etat.iso) bouton(t("toutAfficher"), () => isoler(null));
+  bouton(t("isolerPiece"), () => isoler(new Set([p.it])));
+  bouton(t("isolerAsm"), () => isoler(new Set(piecesL.filter(q => q.nom === p.nom && q.grp === p.grp).map(q => q.it))));
+  c.append(rang); b.append(c);
+}
+function isoler(S){
+  etat.iso = S && S.size ? S : null;
+  construire(); cadrer();
+  const p = etat.sel && piecesL.find(q => q.it === etat.sel); carte(p || null);
+  if (!p && etat.iso === null) carte(null);
+  majBoutons();
 }
 function carteMesure(d, dh, dv){
   const b = boite(), c = document.createElement("div"); c.className = "card";
@@ -866,11 +937,11 @@ function majBoutons(){
   $("bNum").classList.toggle("on", etat.num); $("bMes").classList.toggle("on", etat.mes === "d"); $("bAng").classList.toggle("on", etat.mes === "a"); $("bCtx").classList.toggle("on", etat.ctx);
   $("aide").textContent = etat.mes === "a" ? t("aideAngle") : etat.mes ? t("aideMesurer") : t("aideTourner");
 }
-$("sel").onchange = e => { etat.asm = e.target.value; construire(); cadrer(); carte(null); };
+$("sel").onchange = e => { etat.asm = e.target.value; etat.iso = null; etat.sel = null; construire(); cadrer(); carte(null); };
 $("bNum").onclick = () => { etat.num = !etat.num; construire(); majBoutons(); };
 $("bMes").onclick = () => { etat.mes = etat.mes === "d" ? false : "d"; etat.pts = []; carte(null); majBoutons(); dessiner(); };
 $("bAng").onclick = () => { etat.mes = etat.mes === "a" ? false : "a"; etat.pts = []; carte(null); majBoutons(); dessiner(); };
-$("bCtx").onclick = () => { etat.ctx = !etat.ctx; construire(); cadrer(); majBoutons(); };
+$("bCtx").onclick = () => { etat.ctx = !etat.ctx; etat.iso = null; construire(); cadrer(); majBoutons(); };
 $("bFit").onclick = cadrer;
 $("bScanner").onclick = scanner;
 $("bFinScan").onclick = () => history.back();

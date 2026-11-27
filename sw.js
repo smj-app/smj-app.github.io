@@ -1,5 +1,5 @@
 /* SMJ 3D : l'application fonctionne sans Internet (tout est gardé sur le téléphone). */
-const CACHE = "smj3d-v1.0.3";
+const CACHE = "smj3d-v1.0.4";
 const FICHIERS = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "confidentialite.html",
   "icones/icone-192.png", "icones/icone-512.png", "icones/masquable-192.png", "icones/masquable-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FICHIERS)).then(() => self.skipWaiting())); });
