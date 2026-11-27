@@ -1,7 +1,7 @@
 /* SMJ 3D — visionneuse des assemblages SMJ (codes QR des plans, fichiers de job .smj3d).
    Aucune bibliothèque externe, aucun compte, rien envoyé sur Internet : tout reste sur le téléphone. */
 "use strict";
-const VERSION_APP = "1.0.4";
+const VERSION_APP = "1.0.5";
 
 /* ================================================================ langues */
 const TXT = {
@@ -30,7 +30,7 @@ const TXT = {
     horiz: "horiz.", vert: "vert.", piece: "Pièce", sansTitre: "Sans titre", jobFichier: "fichier de job",
     suppAuto: n => `${n} job(s) supprimée(s) du téléphone (pas ouvertes depuis longtemps ou terminées).`,
     version: "Version", codesAsm: "assemblage(s)",
-    telechargement: "Téléchargement de la job…", pasInternet: "Pas d'Internet : la job complète se télécharge une seule fois, ensuite elle reste sur le téléphone.", lienBrise: "Cette job n'est pas (ou plus) en ligne."
+    telechargement: "Téléchargement de la job…", pasInternet: "Pas d'Internet : la job complète se télécharge une seule fois, ensuite elle reste sur le téléphone.", lienBrise: "Cette job n'est pas encore en ligne. Dans SMJ : générer le dossier (ou l'aperçu de la feuille Installation) avec le jeton GitHub entré dans « Entreprise… »."
   },
   en: {
     reglages: "Settings", scanner: "Scan a QR code", ouvrirFichier: "Open a job file (.smj3d)",
@@ -193,8 +193,13 @@ async function ouvrirStocke(o, asm){
    Le fichier j/<id> sur le site est chiffré ; la clé est après le #, elle n'est jamais envoyée sur Internet. */
 async function telechargerJob(id, cle64){
   const b = cle64.replace(/-/g, "+").replace(/_/g, "/"), kb = Uint8Array.from(atob(b + "===".slice((b.length + 3) % 4)), c => c.charCodeAt(0));
-  const r = await fetch("j/" + id, {cache: "no-store"});
-  if (!r.ok) throw new Error("introuvable");
+  let r = await fetch("j/" + id, {cache: "no-store"}).catch(() => null);
+  if (!r || !r.ok){
+    // job déposée il y a moins de 2 minutes : le site n'est pas encore republié -> la copie directe du dépôt GitHub
+    const raw = "https://raw.githubusercontent.com/smj-app/smj-app.github.io/main/j/" + id;
+    r = await fetch(raw, {cache: "no-store"}).catch(() => null);
+  }
+  if (!r || !r.ok) throw new Error("introuvable");
   const tout = new Uint8Array(await r.arrayBuffer()), ct = tout.slice(0, -16), tag = tout.slice(-16);
   const k = await crypto.subtle.importKey("raw", kb, {name: "HMAC", hash: "SHA-256"}, false, ["sign"]);
   const te = new TextEncoder(), avec = (p, d) => { const o = new Uint8Array(p.length + d.length); o.set(p); o.set(d, p.length); return o; };
